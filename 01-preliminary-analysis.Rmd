@@ -1,0 +1,104 @@
+## Preliminary analysis
+
+```{r pakiety+ustawienia, message=FALSE, warning=FALSE, echo = F}
+require(graphics); require(grDevices)
+library(ggplot2)
+library(reshape2)
+library(grid)
+library(knitr)
+library(dplyr)
+```
+
+### Heatmaps
+
+```{r mapy-ciepla, message=FALSE, warning=FALSE, echo = F, fig.width = 12, fig.height = 12}
+nazwy <- dir("data/", pattern = "dataset")
+nazwy <- nazwy[grep(nazwy, pattern = "Rdata")]
+nazwy <- gsub(nazwy, pattern = ".Rdata", replacement = "")
+
+datasets <- strsplit(nazwy, "_")
+maper <- unique(sapply(datasets, "[[", 2))
+datasets <- unique(sapply(datasets, "[[", 1))
+dane.cor <- NULL
+for (dataset in datasets)
+{
+  klas <- unlist(read.table(file = paste0('data/', dataset, '.csv')))
+  for (map in maper)
+  {
+    load(file = paste0("data/", dataset, "_", map, ".RData"))
+    colnames(cc) <- paste(klas, 1:length(klas), sep = ".")
+    cc <- cc[,order(colnames(cc))]
+    dane <- cor(cc, method = "spearman")
+    dane <- melt(dane)
+    dane.cor <- rbind(dane.cor, cbind(dane, map, dataset))
+  }
+}
+
+dane.kor <- dane.cor %>%
+  mutate(podzial = as.factor(paste(map, dataset, sep = "-")))
+colnames(dane.kor) <- c("Var1", "Var2", "value", "map", "dataset", "podzial")
+dane.kor$dataset <- as.character(dane.kor$dataset)
+dane.kor$dataset[which(dane.kor$dataset == "dataset4")] <- "GSE22260"
+dane.kor$dataset[which(dane.kor$dataset == "dataset5")] <- "GSE50760"
+dane.kor$dataset[which(dane.kor$dataset == "dataset6")] <- "GSE87340"
+dane.kor$dataset[which(dane.kor$dataset == "dataset7")] <- "GSE42146"
+dane.kor$dataset[which(dane.kor$dataset == "dataset8")] <- "GSE41364"
+
+
+p <- ggplot(dane.kor, aes(Var1, Var2)) + 
+  geom_tile(aes(fill = value, group=podzial) ) + 
+  scale_fill_gradient(low = "white", high = "steelblue", name = "Correlation") +
+  theme_bw() + xlab('') + ylab("") + 
+  facet_wrap(map~dataset, scales = "free") + 
+  theme( axis.text.x=element_text(angle=90,hjust=1, size=5), axis.text.y=element_text(size=5))
+print(p)
+```
+
+
+### Barplots
+
+
+```{r barploty, message=FALSE, warning=FALSE, echo = F, fig.width = 10, fig.height = 7}
+library(edgeR)
+
+res <- list()
+
+for (dataset in datasets)
+{
+  dane <- matrix(,length(maper),6)
+  colnames(dane) <- c('>5000','1000-5000', '500-1000', '100-500', '10-100', '<10')
+  rownames(dane) <- maper
+  for (map in maper)
+  {
+    load(file = paste0("data/", dataset, "_", map, ".RData"))
+    isexpr <- rowSums(cpm(cc) > 5) >= 2
+    dane1 <- cc[isexpr,]
+    srednie <- rowMeans(dane1)
+    dane[which(maper == map),6] <- length(which(srednie < 10))
+    dane[which(maper == map),5] <- length(which(srednie >= 10 & srednie < 100))
+    dane[which(maper == map),4] <- length(which(srednie >= 100 & srednie < 500))
+    dane[which(maper == map),3] <- length(which(srednie >= 500 & srednie < 1000))
+    dane[which(maper == map),2] <- length(which(srednie >= 1000 & srednie < 5000))
+    dane[which(maper == map),1] <- length(which(srednie >= 5000))
+  }
+  res[[dataset]] <- dane
+}
+
+res<-melt(res)
+colnames(res) <- c("maper", "abundance", "value", "dataset")
+res$dataset[which(res$dataset == "dataset4")] <- "GSE22260"
+res$dataset[which(res$dataset == "dataset5")] <- "GSE50760"
+res$dataset[which(res$dataset == "dataset6")] <- "GSE87340"
+res$dataset[which(res$dataset == "dataset7")] <- "GSE42146"
+res$dataset[which(res$dataset == "dataset8")] <- "GSE41364"
+res$abundance <- factor(res$abundance, levels=rev(levels(res$abundance)))
+
+p <- ggplot(res, aes(x=maper, y= value, fill = abundance, order= T), stat = "identity") +
+    geom_bar(stat = "identity") +
+    xlab('Methods')+ylab("No of genes") +
+    facet_wrap(~ dataset) +
+    scale_fill_brewer(palette='Greens',name='Abundance\nof genes') +
+    theme_bw() +
+    theme(axis.text.x=element_text(angle=90,hjust=1))
+print(p)
+```

@@ -1,0 +1,28 @@
+bookdown::gitbook:
+  dev: svglite
+  css: style.css
+  split_by: section
+  config:
+    toc:
+      collapse: none
+      before: |
+        <li><a href="./">Przykład</a></li>
+      after: |
+        <li><a href="https://github.com/Bioinformatics-Group-UP-Poznan/Difficult-genes" target="blank">Published with bookdown</a></li>
+    edit: https://github.com/Bioinformatics-Group-UP-Poznan/Difficult-genes/%s
+    download: [pdf, epub]
+bookdown::pdf_book:
+  includes:
+    in_header: preamble.tex
+  latex_engine: xelatex
+  citation_package: natbib
+  dev: "cairo_pdf"
+  template: null
+  pandoc_args: --top-level-division=chapter
+  toc_depth: 3
+  toc_unnumbered: no
+  toc_appendix: yes
+  keep_tex: yes
+bookdown::epub_book: default
+bookdown::html_chapters:
+  css: [style.css, toc.css]

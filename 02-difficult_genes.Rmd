@@ -1,0 +1,89 @@
+## Difficult genes {#difficult_genes}
+
+```{r wstep-02, include = FALSE}
+library(xtable)
+library(reshape)
+```
+
+
+```{r dziwne-geny, echo=F, eval = F}
+source("codes/google_difficult_genes_functions.R")
+
+for (dataset in datasets)
+{
+  res.dane <- list()
+  klas <- unlist(read.table(file = paste0('data/', dataset, '.csv')))
+  county <- NULL
+  for (map in maper)
+  {
+    load(file = paste0("data/", dataset, "_", map, ".RData"))
+    county <- cbind(county, cc)
+  }
+  res.dane[["edgeR"]] <- wyszukiwarka5(county, n.mapper = length(maper), design = klas, method = "edgeR")
+  res.dane[["DESeq"]] <- wyszukiwarka5(county, n.mapper = length(maper), design = klas, method = "DESeq")
+  res.dane[["limma1"]] <- wyszukiwarka5(county, n.mapper = length(maper), design = klas, method = "limma1")
+  res.dane[["limma2"]] <- wyszukiwarka5(county, n.mapper = length(maper), design = klas, method = "limma2")
+  save(res.dane, file = paste0("results/difficult_genes_", dataset, ".RData"))
+}
+
+```
+
+```{r wykresy-dziwnych-genow, echo = F, fig.width=12, fig.height = 16}
+
+por.mapery <- combn(maper, length(maper))
+dane <- list()
+method <- c("edgeR", "DESeq", "limma1", "limma2")
+for (dataset in datasets)
+{
+  county <- NULL
+  for (j in 1:length(maper))
+  {
+    load(file = paste0("data/", dataset, "_", por.mapery[j, 1], ".RData"))
+    colnames(cc) <- paste0("c",1:ncol(cc),".", por.mapery[j, 1])
+    county <- cbind(county, cc)
+  }
+  load(paste0("results/difficult_genes_", dataset, ".RData"))
+    
+  for (met in method)
+  {
+    a <- data.frame(res.dane[[met]]$stats)
+    a <- a[which(a$status.group == "Sig" & a$status.mappers == "Sig"),]
+    a$ind <- a$pval.gr+a$pval.map
+    a <- a[order(a$pval.map, a$pval.gr), ]
+    nazwy.wspolne <- match(rownames(a), rownames(cc))
+    
+    
+    for (j in 1:length(maper))
+    {
+      
+      if(nrow(a) > 0)
+      {  
+        
+        dane[[dataset]][[met]][[por.mapery[j,1] ]] <- county[nazwy.wspolne[1:5], (ncol(cc)*(j-1)+1):(ncol(cc)*j)]
+        colnames(dane[[dataset]][[met]][[por.mapery[j, 1] ]]) <- 1:ncol(cc)
+      } else {
+        dane[[dataset]][[met]][[por.mapery[j,1] ]] <- NULL
+      }
+    }
+  }  
+}
+
+res <- melt(dane)
+dane1 <- res %>% filter(L2 == "edgeR")
+dane1$L1[which(dane1$L1 == "dataset4")] <- "GSE22260"
+dane1$L1[which(dane1$L1 == "dataset5")] <- "GSE50760"
+dane1$L1[which(dane1$L1 == "dataset6")] <- "GSE87340"
+dane1$L1[which(dane1$L1 == "dataset7")] <- "GSE42146"
+dane1$L1[which(dane1$L1 == "dataset8")] <- "GSE41364"
+
+p <- ggplot(dane1) + geom_line( size = 1, 
+            aes(x = X2, y = value, group = L3, colour = L3, alpha = 0.5)) +
+            facet_wrap(L1~X1, scales = "free", ncol=5) + theme_bw() +
+            scale_colour_brewer(palette = "Set1") + scale_fill_hue(l=40) +
+            scale_alpha_continuous(guide = FALSE) +
+            theme(legend.position = "bottom", legend.title=element_blank()) +
+            ylab("Counts") + xlab("Sample no") + 
+            theme(text = element_text(size = 20)) +
+            guides(color = guide_legend(override.aes = list(alpha = 1, size = 3)))
+print(p)
+```

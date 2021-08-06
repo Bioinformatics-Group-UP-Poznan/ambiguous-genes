@@ -1,0 +1,181 @@
+## Description of difficult genes {#description}
+
+
+```{r dziwne-geny-liczby-all1, results="asis"}
+
+for (dataset in datasets)
+{
+  load(file = paste0("results/difficult_genes_", dataset, ".RData"))
+  con.m <- matrix(,2,2*length(method))
+  rownames(con.m) <- c('g.T', 'g.N')
+  colnames(con.m) <- rep(c('m.T', 'm.N'),length(method))
+
+  for (met in method)
+  {
+    con.m[1, (which(method == met)-1)*2+1] <- length(res.dane[[met]]$stats[which(res.dane[[met]]$stats$status.group == "Sig" & res.dane[[met]]$stats$status.mappers == "Sig"),1])/length(res.dane[[met]]$stats$status.group)
+    con.m[1, (which(method == met)-1)*2+2] <- length(res.dane[[met]]$stats[which(res.dane[[met]]$stats$status.group == "Sig" & res.dane[[met]]$stats$status.mappers == "nonSig"),1])/length(res.dane[[met]]$stats$status.group)
+    con.m[2, (which(method == met)-1)*2+1] <- length(res.dane[[met]]$stats[which(res.dane[[met]]$stats$status.group == "nonSig" & res.dane[[met]]$stats$status.mappers == "Sig"),1])/length(res.dane[[met]]$stats$status.group)
+    con.m[2, (which(method == met)-1)*2+2] <- length(res.dane[[met]]$stats[which(res.dane[[met]]$stats$status.group == "nonSig" & res.dane[[met]]$stats$status.mappers == "nonSig"),1])/length(res.dane[[met]]$stats$status.group)
+    
+  }  
+  cat("contingency table for methods edgeR, DESeq, limma + voom i limma + vst for dataset ", dataset, "\n")
+  
+  print(kable(con.m*100, digits = 2))
+  cat("\n")
+}
+
+```
+
+```{r dziwne-geny-liczby, results="asis"}
+
+met <- "edgeR"
+datasets <- datasets[c(1,5,4,2,3)]
+con.m <- matrix(,2,2*length(datasets))
+rownames(con.m) <- c('yes', 'no')
+colnames(con.m) <- rep(c('m.T', 'm.N'),length(datasets))
+
+for (dataset in datasets)
+{
+  load(file = paste0("results/difficult_genes_", dataset, ".RData"))
+  
+    con.m[1, (which(datasets == dataset)-1)*2+1] <- length(res.dane[[met]]$stats[which(res.dane[[met]]$stats$status.group == "Sig" & res.dane[[met]]$stats$status.mappers == "Sig"),1])/length(res.dane[[met]]$stats$status.group)
+    con.m[1, (which(datasets == dataset)-1)*2+2] <- length(res.dane[[met]]$stats[which(res.dane[[met]]$stats$status.group == "Sig" & res.dane[[met]]$stats$status.mappers == "nonSig"),1])/length(res.dane[[met]]$stats$status.group)
+    con.m[2, (which(datasets == dataset)-1)*2+1] <- length(res.dane[[met]]$stats[which(res.dane[[met]]$stats$status.group == "nonSig" & res.dane[[met]]$stats$status.mappers == "Sig"),1])/length(res.dane[[met]]$stats$status.group)
+    con.m[2, (which(datasets == dataset)-1)*2+2] <- length(res.dane[[met]]$stats[which(res.dane[[met]]$stats$status.group == "nonSig" & res.dane[[met]]$stats$status.mappers == "nonSig"),1])/length(res.dane[[met]]$stats$status.group)
+}
+
+library(xtable)
+header <- list()
+
+header$pos <- list(0,0,0)
+header$command <- c("\\hline & \\multicolumn{10}{c}{Dataset}\\\\\n",
+                    "\\cline{2-11} & \\multicolumn{2}{c|}{GSE22260} & \\multicolumn{2}{c|}{GSE41364} & \\multicolumn{2}{c|}{GSE42146} & \\multicolumn{2}{c|}{GSE50760} &\\multicolumn{2}{c}{GSE87340} \\\\\n", 
+                    "\\hline \\diagbox{Groups}{Mappers} & yes & no & yes & no &  yes & no &  yes & no &  yes & no \\\\\n")
+con.m <- con.m*100 
+con.m %>%
+  xtable(digits = 2,
+         label = 'tab-per-difficult',
+         caption = 'Percentage of significant genes due to mappers and groups across each dataset',
+         align = "c|cc|cc|cc|cc|cc") %>%
+  print(include.colnames = FALSE,
+        include.rownames = TRUE,
+        caption.placement = 'top',
+        comment = FALSE,
+        hline.after = c(0,2),
+        add.to.row = header,
+        NA.string = '--',
+        sanitize.text.function = function(x){x},
+        table.placement = 'ht!')
+
+```
+
+```{r dziwne-geny-liczby-mapery-oddzielnie,  results="asis"}
+library(tibble)
+met <- "edgeR"
+datasets <- datasets[c(1,5,4,2,3)]
+con.m <- matrix(,length(datasets),2*length(maper))
+datasets1 <- c("GSE22260", "GSE41364", "GSE42146", "GSE50760", "GSE87340")
+rownames(con.m) <- datasets1
+colnames(con.m) <- rep(c('m.T', 'm.N'),length(maper))
+lista.dziwnych <- list()
+
+source("codes/differential_analysis_functions.R")
+for (dataset in datasets)
+{
+  klas <- unlist(read.table(file = paste0('data/', dataset, '.csv')))
+  load(file = paste0("results/difficult_genes_", dataset, ".RData"))
+  
+  lista.dziwnych[[dataset]][[met]] <-
+      res.dane[[met]]$stats %>%
+      rownames_to_column("nazwy") %>%
+      filter(status.mappers == "Sig" & status.group == "Sig") %>%
+      arrange(pval.map, pval.gr)
+  
+  for (map in maper)
+  {
+    load(file = paste0("data/", dataset, "_", map, ".Rdata"))
+    
+    res.dane1 <- obliczenia.all.methods1(cc, klas, method = met)
+    res.dane1 <- res.dane1 %>% arrange(padj)
+    roznicujace <- res.dane1$ID[which(res.dane1$padj < 0.05)]
+    
+    con.m[which(datasets == dataset), (which(maper == map)-1)*2+1]  <- length(intersect(lista.dziwnych[[dataset]][[met]]$nazwy, roznicujace))/length(res.dane1$ID)*100
+    
+    con.m[which(datasets == dataset), (which(maper == map)-1)*2+2] <- length(intersect(roznicujace, lista.dziwnych[[dataset]][[met]]$nazwy))/length(roznicujace)*100
+  }  
+}
+
+
+library(xtable)
+header <- list()
+
+header$pos <- list(0,0,0)
+header$command <- c("\\hline \\multirow{3}{*}{Datasets} & \\multicolumn{6}{c}{Mappers}\\\\\n",
+                    "\\cline{2-7} & \\multicolumn{2}{c|}{Hisat} & \\multicolumn{2}{c|}{Star} & \\multicolumn{2}{c|}{Subread} \\\\\n", 
+                    "\\cline{2-7}  & \\% of all & \\% of DEG &  \\% of all & \\% of DEG &  \\% of all & \\% of DEG \\\\\n")
+
+con.m %>%
+  xtable(digits = 2,
+         label = 'tab-per-difficult',
+         caption = 'Percentage of significant genes due to mappers and groups across each dataset',
+         align = "c|cc|cc|cc|") %>%
+  print(include.colnames = FALSE,
+        include.rownames = TRUE,
+        caption.placement = 'top',
+        comment = FALSE,
+        hline.after = c(0,5),
+        add.to.row = header,
+        NA.string = '--',
+        sanitize.text.function = function(x){x},
+        table.placement = 'ht!')
+```
+
+
+```{r venny, results="asis"}
+library(VennDiagram)
+library(RColorBrewer)
+kolory <- brewer.pal(length(datasets), "Set1")
+met <- "edgeR"
+
+datasets1 <- c("GSE22260", "GSE41364", "GSE42146", "GSE50760", "GSE87340")
+dziwne <- list()
+for (dataset in datasets)
+{
+  load(file = paste0("results/difficult_genes_", dataset, ".RData"))
+  
+    dziwne[[met]][[dataset]] <- rownames(res.dane[[met]]$stats)[which(res.dane[[met]]$stats$status.group == "Sig" & res.dane[[met]]$stats$status.mappers == "Sig")]
+}
+
+nazwy <- list()
+  b <- get.venn.partitions(x = list(
+    A=dziwne[[met]][[1]],
+    B=dziwne[[met]][[2]],
+    C=dziwne[[met]][[3]],
+    D=dziwne[[met]][[4]],
+    E=dziwne[[met]][[5]]
+  ))
+  a <- b$..count..
+  venn.plot <- draw.quintuple.venn(
+    area1 = sum(a[c(1,3,5,7,9,11,13,15,17,19,21,23,25,27,29,31)]), area2 = sum(a[c(1,2,5,6,9,10,13,14,17,18,21,22,25,26,29,30)]), 
+    area3 = sum(a[c(1:4,9:12,17:20,25:28)]), area4 = sum(a[c(1:8,17:24)]), area5 = sum(a[1:16]),
+    n12 = sum(a[c(1,5,9,13,17,21,25,29)]), n13 = sum(a[c(1,3,9,11,17,19,25,27)]), 
+    n14 = sum(a[c(1,3,5,7,17,19,21,23)]), n15 = sum(a[c(1,3,5,7,9,11,13,15)]),
+    n23 = sum(a[c(1,2,9,10,17,18,25,26)]), n24 = sum(a[c(1,2,5,6,17,18,21,22)]), 
+    n25 = sum(a[c(1,2,5,6,9,10,13,14)]), n34 = sum(a[c(1:4,17:20)]), 
+    n35 = sum(a[c(1:4,9:12)]), n45 = sum(a[c(1:8)]), 
+    n123 = sum(a[c(1,9,17,25)]), n124 = sum(a[c(1,5,17,21)]), n125 = sum(a[c(1,5,9,13)]), 
+    n134 = sum(a[c(1,3,17,19)]), n135 = sum(a[c(1,3,9,11)]), n145 = sum(a[c(1,3,5,7)]),
+    n234 = sum(a[c(1,2,17,18)]), n235 = sum(a[c(1,2,9,10)]), 
+    n245 = sum(a[c(1,2,5,6)]), n345 = sum(a[c(1:4)]),
+    n1234 = sum(a[c(1,17)]), n1235 = sum(a[c(1,9)]),  n1245 = sum(a[c(1,5)]), 
+    n1345 = sum(a[c(1,3)]), n2345 = sum(a[c(1:2)]),
+    n12345 = sum(a[c(1)]),
+    category = datasets1,
+    fill = kolory, alpha = 0.30, cex = 1.2, fontfamily = "serif",
+    rotation.degree = 360, margin = 0.1, main = "# of joint difficult genes between datasets",
+    main.pos = c(0.5,0.8), height = 500,width = 500, resolution = 600, lwd = 0.5
+  )
+  grid.draw(venn.plot)
+  grid.newpage()
+  nazwy[[met]] <- b$..values..$`1`
+```
