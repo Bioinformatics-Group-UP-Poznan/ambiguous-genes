@@ -1,21 +1,171 @@
-## Description of difficult genes {#description}
+# Description of difficult genes {#description}
+
+```{r}
+datasets1 <- c("GSE22260", "GSE41364", "GSE42146", "GSE50760", "GSE87340")
+names(datasets1) <- paste0("dataset", c(4, 8, 7, 5, 6))
+```
+
+## Characteristics of DGs
+
+Loading annotation for exons.
+
+```{r annotation}
+gtf.df <- readRDS("data/hg38geneModel.rds")
+```
 
 
-```{r dziwne-geny-liczby-all1, results="asis"}
+```{r tab1-mapers-separately, eval = F}
+dg.lists <- readRDS("results/lists_dg_mappers_separately.rds")
+ndg.lists <- readRDS("results/lists_ndg_mappers_separately.rds")
+dg.lists <- transpose(map(dg.lists, transpose))$edgeR
+ndg.lists <- transpose(map(ndg.lists, transpose))$edgeR
 
+dg <- dg.lists %>% 
+  enframe(name = "datasets") %>% 
+  mutate(value = map(value, enframe, name = "mapper", value = "gene")) %>%
+  unnest(value) %>%
+  unnest(gene)
+
+ndg <- ndg.lists %>% 
+  enframe(name = "datasets") %>% 
+  mutate(value = map(value, enframe, name = "mapper", value = "gene")) %>%
+  unnest(value) %>%
+  unnest(gene) 
+
+dg$dg <- "yes"
+ndg$dg <- "no"
+
+df.tab1 <- bind_rows(dg, ndg) %>% 
+  left_join(gtf.df, by = c("gene" = "gene"), relationship = "many-to-many") %>% 
+  group_by(datasets, mapper, gene, dg) %>% 
+  distinct(exon, .keep_all = TRUE) %>% 
+  summarize(Ex.min = min(width), Ex.max = max(width), Ex.mean = mean(width), Ex.no = n(), Tr.length = sum(width)) %>% 
+  group_by(datasets, mapper, dg) %>% 
+  summarize(Ex.min = mean(Ex.min), Ex.max = mean(Ex.max), Ex.mean = mean(Ex.mean), Ex.no = mean(Ex.no), Tr.length = mean(Tr.length))
+df.tab1
+```
+
+
+```{r old-tab1, eval=F}
+
+dg.lists <- list()
+ndg.lists <- list()
 for (dataset in datasets)
 {
   load(file = paste0("results/difficult_genes_", dataset, ".RData"))
+  dg.lists[[dataset]] <- rownames(res.dane$edgeR$stats[which(res.dane$edgeR$stats$status.group == "Sig" & res.dane$edgeR$stats$status.mappers == "Sig"),])
+  ndg.lists[[dataset]] <- rownames(res.dane$edgeR$stats[which(res.dane$edgeR$stats$status.group == "Sig" & res.dane$edgeR$stats$status.mappers == "nonSig"),])
+}
+
+dg <- dg.lists %>% 
+  enframe(name = "datasets", value = "gene") %>% 
+  unnest(gene)
+
+ndg <- ndg.lists %>% 
+  enframe(name = "datasets", value = "gene") %>% 
+  unnest(gene)
+
+dg$dg <- "yes"
+ndg$dg <- "no"
+
+df.tab1 <- bind_rows(dg, ndg) %>% 
+  left_join(gtf.df, by = c("gene" = "gene"), relationship = "many-to-many") 
+
+tab1 <- df.tab1 %>% 
+  group_by(datasets, gene, transcript, dg) %>% 
+  summarize(Ex.min = min(width), Ex.max = max(width), Ex.mean = mean(width), Ex.no = n(), Tr.length = sum(width)) %>% 
+  ungroup() %>% 
+  group_by(datasets, dg) %>% 
+  summarize(across(where(is.numeric), ~ mean(.x, na.rm = TRUE)))
+
+tab1
+```
+
+
+```{r current-tab1}
+dg.lists <- list()
+ndg.lists <- list()
+for (dataset in datasets)
+{
+  load(file = paste0("results/difficult_genes_", dataset, ".RData"))
+  dg.lists[[dataset]] <- rownames(res.dane$edgeR$stats[which(res.dane$edgeR$stats$status.group == "Sig" & res.dane$edgeR$stats$status.mappers == "Sig"),])
+  ndg.lists[[dataset]] <- rownames(res.dane$edgeR$stats[which(res.dane$edgeR$stats$status.group == "Sig" & res.dane$edgeR$stats$status.mappers == "nonSig"),])
+}
+
+dg <- dg.lists %>% 
+  enframe(name = "datasets", value = "gene") %>% 
+  unnest(gene)
+
+ndg <- ndg.lists %>% 
+  enframe(name = "datasets", value = "gene") %>% 
+  unnest(gene)
+
+dg$Type <- "DG"
+ndg$Type <- "non DG"
+
+df.tab1 <- bind_rows(dg, ndg) %>% 
+  left_join(gtf.df, by = c("gene" = "gene"), relationship = "many-to-many") 
+
+tab1 <- df.tab1 %>% 
+  group_by(datasets, gene, transcript, Type) %>% 
+  summarize(Ex.min = min(width), Ex.max = max(width), Ex.median = median(width), Tr.length = sum(width), Ex.no = n(), feature1 = any(str_detect(feature, "pseudogene")), feature2 = any(str_detect(feature, "protein_coding")) ) %>% 
+  ungroup() %>% 
+  group_by(datasets, gene, Type) %>% 
+  summarize(across(where(is.numeric), median), Tr.no = n(), feature1 = any(feature1), feature2 = any(feature2)) %>%
+  ungroup() %>% 
+  group_by(datasets, Type) %>% 
+  summarize(across(where(is.numeric), median), Pseudogenes.percent = sum(feature1)/n()*100, Coding.percent = sum(feature2)/n()*100)
+ 
+tab1$datasets[which(tab1$datasets == "dataset4")] <- "GSE22260"
+tab1$datasets[which(tab1$datasets == "dataset5")] <- "GSE50760"
+tab1$datasets[which(tab1$datasets == "dataset6")] <- "GSE87340"
+tab1$datasets[which(tab1$datasets == "dataset7")] <- "GSE42146"
+tab1$datasets[which(tab1$datasets == "dataset8")] <- "GSE41364"
+```
+
+
+```{r tab-characteristics}
+header <- list()
+
+header$pos <- list(0)
+header$command <- c(
+                    "\\multirow{2}{*}{GSE22260} & \\multirow{2}{*}{GSE41364} & \\multirow{2}{*}{GSE42146} & \\multirow{2}{*}{GSE50760} &\\multirow{2}{*}}{GSE87340} \\\\\n")
+
+tab1 %>% 
+  arrange(datasets) %>% 
+  rename(Dataset = datasets) %>% 
+  xtable(digits = 0,
+         label = 'tab-char',
+         caption = 'Characteristics of DG genes found in each dataset. Columns represent Ex.min - the length of the shortest exon, Ex.max - the length of the longest exon, Ex.mean - the mean exon length, Ex.no - the total number of exons as well as Tr.length - the transcript length. Each value was calculated as a mean value across all transcripts in datasets with division to DG and other genes.',
+         align = "cc|c|cccccccc") %>%
+  print(include.colnames = T,
+        include.rownames = F,
+        caption.placement = 'top',
+        comment = FALSE,
+        hline.after = c(-1,0,2,4,6,8,10),
+        #add.to.row = header,
+        NA.string = '--',
+        sanitize.text.function = function(x){x},
+        table.placement = 'ht!')
+tab1
+```
+
+## Number of DGs
+
+```{r dg-counts-all1, results="asis"}
+for (dataset in datasets)
+{
+  dg <- readRDS(file = paste0("results/difficult_genes_", dataset, ".rds"))
   con.m <- matrix(,2,2*length(method))
   rownames(con.m) <- c('g.T', 'g.N')
   colnames(con.m) <- rep(c('m.T', 'm.N'),length(method))
 
   for (met in method)
   {
-    con.m[1, (which(method == met)-1)*2+1] <- length(res.dane[[met]]$stats[which(res.dane[[met]]$stats$status.group == "Sig" & res.dane[[met]]$stats$status.mappers == "Sig"),1])/length(res.dane[[met]]$stats$status.group)
-    con.m[1, (which(method == met)-1)*2+2] <- length(res.dane[[met]]$stats[which(res.dane[[met]]$stats$status.group == "Sig" & res.dane[[met]]$stats$status.mappers == "nonSig"),1])/length(res.dane[[met]]$stats$status.group)
-    con.m[2, (which(method == met)-1)*2+1] <- length(res.dane[[met]]$stats[which(res.dane[[met]]$stats$status.group == "nonSig" & res.dane[[met]]$stats$status.mappers == "Sig"),1])/length(res.dane[[met]]$stats$status.group)
-    con.m[2, (which(method == met)-1)*2+2] <- length(res.dane[[met]]$stats[which(res.dane[[met]]$stats$status.group == "nonSig" & res.dane[[met]]$stats$status.mappers == "nonSig"),1])/length(res.dane[[met]]$stats$status.group)
+    con.m[1, (which(method == met)-1)*2+1] <- length(dg[[met]]$stats[which(dg[[met]]$stats$status.group == "Sig" & dg[[met]]$stats$status.mappers == "Sig"),1])/length(dg[[met]]$stats$status.group)
+    con.m[1, (which(method == met)-1)*2+2] <- length(dg[[met]]$stats[which(dg[[met]]$stats$status.group == "Sig" & dg[[met]]$stats$status.mappers == "nonSig"),1])/length(dg[[met]]$stats$status.group)
+    con.m[2, (which(method == met)-1)*2+1] <- length(dg[[met]]$stats[which(dg[[met]]$stats$status.group == "nonSig" & dg[[met]]$stats$status.mappers == "Sig"),1])/length(dg[[met]]$stats$status.group)
+    con.m[2, (which(method == met)-1)*2+2] <- length(dg[[met]]$stats[which(dg[[met]]$stats$status.group == "nonSig" & dg[[met]]$stats$status.mappers == "nonSig"),1])/length(dg[[met]]$stats$status.group)
     
   }  
   cat("contingency table for methods edgeR, DESeq, limma + voom i limma + vst for dataset ", dataset, "\n")
@@ -26,25 +176,25 @@ for (dataset in datasets)
 
 ```
 
-```{r dziwne-geny-liczby, results="asis"}
+```{r dg-counts, results="asis"}
 
 met <- "edgeR"
-datasets <- datasets[c(1,5,4,2,3)]
+
+datasets <- datasets[match(datasets, names(datasets1))]
 con.m <- matrix(,2,2*length(datasets))
 rownames(con.m) <- c('yes', 'no')
 colnames(con.m) <- rep(c('m.T', 'm.N'),length(datasets))
 
 for (dataset in datasets)
 {
-  load(file = paste0("results/difficult_genes_", dataset, ".RData"))
+  dg <- readRDS(file = paste0("results/difficult_genes_", dataset, ".rds"))
   
-    con.m[1, (which(datasets == dataset)-1)*2+1] <- length(res.dane[[met]]$stats[which(res.dane[[met]]$stats$status.group == "Sig" & res.dane[[met]]$stats$status.mappers == "Sig"),1])/length(res.dane[[met]]$stats$status.group)
-    con.m[1, (which(datasets == dataset)-1)*2+2] <- length(res.dane[[met]]$stats[which(res.dane[[met]]$stats$status.group == "Sig" & res.dane[[met]]$stats$status.mappers == "nonSig"),1])/length(res.dane[[met]]$stats$status.group)
-    con.m[2, (which(datasets == dataset)-1)*2+1] <- length(res.dane[[met]]$stats[which(res.dane[[met]]$stats$status.group == "nonSig" & res.dane[[met]]$stats$status.mappers == "Sig"),1])/length(res.dane[[met]]$stats$status.group)
-    con.m[2, (which(datasets == dataset)-1)*2+2] <- length(res.dane[[met]]$stats[which(res.dane[[met]]$stats$status.group == "nonSig" & res.dane[[met]]$stats$status.mappers == "nonSig"),1])/length(res.dane[[met]]$stats$status.group)
+    con.m[1, (which(datasets == dataset)-1)*2+1] <- length(dg[[met]]$stats[which(dg[[met]]$stats$status.group == "Sig" & dg[[met]]$stats$status.mappers == "Sig"),1])/length(dg[[met]]$stats$status.group)
+    con.m[1, (which(datasets == dataset)-1)*2+2] <- length(dg[[met]]$stats[which(dg[[met]]$stats$status.group == "Sig" & dg[[met]]$stats$status.mappers == "nonSig"),1])/length(dg[[met]]$stats$status.group)
+    con.m[2, (which(datasets == dataset)-1)*2+1] <- length(dg[[met]]$stats[which(dg[[met]]$stats$status.group == "nonSig" & dg[[met]]$stats$status.mappers == "Sig"),1])/length(dg[[met]]$stats$status.group)
+    con.m[2, (which(datasets == dataset)-1)*2+2] <- length(dg[[met]]$stats[which(dg[[met]]$stats$status.group == "nonSig" & dg[[met]]$stats$status.mappers == "nonSig"),1])/length(dg[[met]]$stats$status.group)
 }
 
-library(xtable)
 header <- list()
 
 header$pos <- list(0,0,0)
@@ -69,44 +219,44 @@ con.m %>%
 
 ```
 
-```{r dziwne-geny-liczby-mapery-oddzielnie,  results="asis"}
-library(tibble)
+## Number of DGs with mappers separately
+
+```{r dg-counts-mappers-separately,  results="asis"}
 met <- "edgeR"
-datasets <- datasets[c(1,5,4,2,3)]
 con.m <- matrix(,length(datasets),2*length(maper))
-datasets1 <- c("GSE22260", "GSE41364", "GSE42146", "GSE50760", "GSE87340")
 rownames(con.m) <- datasets1
 colnames(con.m) <- rep(c('m.T', 'm.N'),length(maper))
-lista.dziwnych <- list()
+dg.id <- list()
 
 source("codes/differential_analysis_functions.R")
 for (dataset in datasets)
 {
-  klas <- unlist(read.table(file = paste0('data/', dataset, '.csv')))
-  load(file = paste0("results/difficult_genes_", dataset, ".RData"))
+  groups <- unlist(read.table(file = paste0('data/', dataset, '.csv')))
+  dg <- readRDS(file = paste0("results/difficult_genes_", dataset, ".rds"))
   
-  lista.dziwnych[[dataset]][[met]] <-
-      res.dane[[met]]$stats %>%
-      rownames_to_column("nazwy") %>%
+  dg.id[[dataset]][[met]] <-
+      dg[[met]]$stats %>%
+      rownames_to_column("ID") %>%
       filter(status.mappers == "Sig" & status.group == "Sig") %>%
       arrange(pval.map, pval.gr)
   
   for (map in maper)
   {
-    load(file = paste0("data/", dataset, "_", map, ".Rdata"))
+    cc <- readRDS(file = paste0("data/", dataset, "_", map, ".rds"))
     
-    res.dane1 <- obliczenia.all.methods1(cc, klas, method = met)
-    res.dane1 <- res.dane1 %>% arrange(padj)
-    roznicujace <- res.dane1$ID[which(res.dane1$padj < 0.05)]
+    res.data1 <- diffAnaAll1(cc, groups, method = met)
+    res.data1 <- res.data1 %>% arrange(padj)
+    deg.id <- res.data1$ID[which(res.data1$padj < 0.05)]
     
-    con.m[which(datasets == dataset), (which(maper == map)-1)*2+1]  <- length(intersect(lista.dziwnych[[dataset]][[met]]$nazwy, roznicujace))/length(res.dane1$ID)*100
+    con.m[which(datasets == dataset), (which(maper == map)-1)*2+1]  <- length(intersect(dg.id[[dataset]][[met]]$ID, deg.id))/length(res.data1$ID)*100
     
-    con.m[which(datasets == dataset), (which(maper == map)-1)*2+2] <- length(intersect(roznicujace, lista.dziwnych[[dataset]][[met]]$nazwy))/length(roznicujace)*100
+    con.m[which(datasets == dataset), (which(maper == map)-1)*2+2] <- length(intersect(deg.id, dg.id[[dataset]][[met]]$ID))/length(deg.id)*100
   }  
 }
+```
 
 
-library(xtable)
+```{r tab2,  results="asis"}
 header <- list()
 
 header$pos <- list(0,0,0)
@@ -130,33 +280,34 @@ con.m %>%
         table.placement = 'ht!')
 ```
 
+## Venn diagrams 
 
-```{r venny, results="asis"}
+```{r venns, results="asis"}
 library(VennDiagram)
-library(RColorBrewer)
-kolory <- brewer.pal(length(datasets), "Set1")
+
+venn.colors <- brewer.pal(length(datasets), "Set1")
 met <- "edgeR"
 
-datasets1 <- c("GSE22260", "GSE41364", "GSE42146", "GSE50760", "GSE87340")
-dziwne <- list()
+dg.list <- list()
 for (dataset in datasets)
 {
-  load(file = paste0("results/difficult_genes_", dataset, ".RData"))
+  dg <- readRDS(file = paste0("results/difficult_genes_", dataset, ".rds"))
   
-    dziwne[[met]][[dataset]] <- rownames(res.dane[[met]]$stats)[which(res.dane[[met]]$stats$status.group == "Sig" & res.dane[[met]]$stats$status.mappers == "Sig")]
+    dg.list[[met]][[dataset]] <- rownames(dg[[met]]$stats)[which(dg[[met]]$stats$status.group == "Sig" & dg[[met]]$stats$status.mappers == "Sig")]
 }
 
-nazwy <- list()
-  b <- get.venn.partitions(x = list(
-    A=dziwne[[met]][[1]],
-    B=dziwne[[met]][[2]],
-    C=dziwne[[met]][[3]],
-    D=dziwne[[met]][[4]],
-    E=dziwne[[met]][[5]]
+ID <- list()
+b <- get.venn.partitions(x = list(
+    A=dg.list[[met]][[1]],
+    B=dg.list[[met]][[2]],
+    C=dg.list[[met]][[3]],
+    D=dg.list[[met]][[4]],
+    E=dg.list[[met]][[5]]
   ))
-  a <- b$..count..
-  venn.plot <- draw.quintuple.venn(
-    area1 = sum(a[c(1,3,5,7,9,11,13,15,17,19,21,23,25,27,29,31)]), area2 = sum(a[c(1,2,5,6,9,10,13,14,17,18,21,22,25,26,29,30)]), 
+a <- b$..count..
+venn.plot <- draw.quintuple.venn(
+    area1 = sum(a[c(1,3,5,7,9,11,13,15,17,19,21,23,25,27,29,31)]), 
+    area2 = sum(a[c(1,2,5,6,9,10,13,14,17,18,21,22,25,26,29,30)]), 
     area3 = sum(a[c(1:4,9:12,17:20,25:28)]), area4 = sum(a[c(1:8,17:24)]), area5 = sum(a[1:16]),
     n12 = sum(a[c(1,5,9,13,17,21,25,29)]), n13 = sum(a[c(1,3,9,11,17,19,25,27)]), 
     n14 = sum(a[c(1,3,5,7,17,19,21,23)]), n15 = sum(a[c(1,3,5,7,9,11,13,15)]),
@@ -171,11 +322,11 @@ nazwy <- list()
     n1345 = sum(a[c(1,3)]), n2345 = sum(a[c(1:2)]),
     n12345 = sum(a[c(1)]),
     category = datasets1,
-    fill = kolory, alpha = 0.30, cex = 1.2, fontfamily = "serif",
+    fill = venn.colors, alpha = 0.30, cex = 1.2, fontfamily = "serif",
     rotation.degree = 360, margin = 0.1, main = "# of joint difficult genes between datasets",
     main.pos = c(0.5,0.8), height = 500,width = 500, resolution = 600, lwd = 0.5
-  )
-  grid.draw(venn.plot)
-  grid.newpage()
-  nazwy[[met]] <- b$..values..$`1`
+)
+grid.draw(venn.plot)
+grid.newpage()
+ID[[met]] <- b$..values..$`1`
 ```
