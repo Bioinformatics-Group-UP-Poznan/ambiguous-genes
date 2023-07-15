@@ -2,50 +2,48 @@
 
 ### Classification errors
 
-```{r wykres-polaczonego-klasyfikatora, results="asis"}
-library(purrr)
-library(plotROC)
-library(dplyr)
-library(ggplot2)
-# before this code you have to run codes from file "errors_joint_classifier.R"
-load("results/joint_classifier_edgeR_cpm.RData")
-wyn_dziwne <- wyn_dziwne1
-dziwne_wynik <- wyn_dziwne %>% 
+Before this code you have to run codes from file "errors_joint_classifier.R"
+
+```{r violinplot-joint-classifier, results="asis"}
+dg.class <- readRDS("results/dg_joint_classifier_edgeR_cpm.rds")
+
+dg.class1 <- dg.class %>% 
   map_df(~.x  %>% map_df(~.x %>% map_df(~.x, .id = 'Method'), .id = 'Mapper'), .id ='Dataset')
-dane <- cbind(dziwne_wynik, dziwnosc = "yes")
+vioplot.data <- cbind(dg.class1, dg = "yes")
 
-wyn_niedziwne <- wyn_niedziwne1
-niedziwne_wynik <- wyn_niedziwne %>% 
+ndg.class <- readRDS("results/ndg_joint_classifier_edgeR_cpm.rds")
+
+ndg.class1 <- ndg.class %>% 
   map_df(~.x  %>% map_df(~.x %>% map_df(~.x, .id = 'Method'), .id = 'Mapper'), .id ='Dataset')
-dane1 <- cbind(niedziwne_wynik, dziwnosc = "no")
+vioplot.data1 <- cbind(ndg.class1, dg = "no")
 
-dane <- rbind(dane, dane1)
-dane$Method <- as.character(dane$Method)
-dane$Mapper <- as.character(dane$Mapper)
-#dane$f <- as.factor(dane$f) 
-colnames(dane)[c(6,7,8)] <- paste0("gr", 0:2)
-#dane$yhat <- apply(dane[,c(6:7,10)], 1, function(x) {a <- which.max(x)-1; a[1]})
-dane$yhat <- apply(dane[,c(6:8)], 1, function(x) {a <- which.max(x)-1; a[1]})
-
-
-dane$Dataset[dane$Dataset == "dataset4"] <- "GSE22260"
-dane$Dataset[dane$Dataset == "dataset5"] <- "GSE50760"
-dane$Dataset[dane$Dataset == "dataset6"] <- "GSE87340"
-dane$Dataset[dane$Dataset == "dataset7"] <- "GSE42146"
-dane$Dataset[dane$Dataset == "dataset8"] <- "GSE41364"
+vioplot.data <- rbind(vioplot.data, vioplot.data1)
+vioplot.data$Method <- as.character(vioplot.data$Method)
+vioplot.data$Mapper <- as.character(vioplot.data$Mapper)
+#vioplot.data$f <- as.factor(vioplot.data$f) 
+colnames(vioplot.data)[c(6,7,8)] <- paste0("gr", 0:2)
+#vioplot.data$yhat <- apply(vioplot.data[,c(6:7,10)], 1, function(x) {a <- which.max(x)-1; a[1]})
+vioplot.data$yhat <- apply(vioplot.data[,c(6:8)], 1, function(x) {a <- which.max(x)-1; a[1]})
 
 
+vioplot.data$Dataset[vioplot.data$Dataset == "dataset4"] <- "GSE22260"
+vioplot.data$Dataset[vioplot.data$Dataset == "dataset5"] <- "GSE50760"
+vioplot.data$Dataset[vioplot.data$Dataset == "dataset6"] <- "GSE87340"
+vioplot.data$Dataset[vioplot.data$Dataset == "dataset7"] <- "GSE42146"
+vioplot.data$Dataset[vioplot.data$Dataset == "dataset8"] <- "GSE41364"
 
-dane2 <- dane %>%
-  group_by(Dataset, Mapper, Method, dziwnosc, f, sym) %>%
+
+
+vioplot.data2 <- vioplot.data %>%
+  group_by(Dataset, Mapper, Method, dg, f, sym) %>%
   summarise(value = length(which(true.y-yhat != 0))/length(true.y))
-dane2$f1 <- factor(rep(c("# of predictors = 1/3 of samples", 
+vioplot.data2$f1 <- factor(rep(c("# of predictors = 1/3 of samples", 
                          "# of predictors = 1/2 of samples", 
                          "# of predictors = 2/3 of samples"), 
                        300))
-levels(dane2$f1) <- levels(dane2$f1)[c(2,1,3)]
-colnames(dane2)[4] <- "Difficultness"
-p2 <- ggplot(dane2, aes(x=Mapper, y=value, fill=Difficultness)) +
+levels(vioplot.data2$f1) <- levels(vioplot.data2$f1)[c(2,1,3)]
+colnames(vioplot.data2)[4] <- "Difficultness"
+p2 <- ggplot(vioplot.data2, aes(x=Mapper, y=value, fill=Difficultness)) +
   geom_violin(trim=TRUE) + facet_grid(Dataset ~ f1, scales = "free") +
   labs(x="Mapper", y = "Percentage of misclassified samples") +
   theme_bw() + theme(plot.title = element_text(hjust = 0.5),
@@ -54,12 +52,15 @@ p2 <- ggplot(dane2, aes(x=Mapper, y=value, fill=Difficultness)) +
   
 print(p2)
 
-
+ggsave("results/classification_errors.png", width = 7, height = 5.13, dpi = 300)
 ```
 
-```{r liczenie-auc, results="asis"}
+### AUC values
+
+```{r tab-auc, results="asis"}
 library(pROC)
-library(reshape2)
+library(plotROC)
+
 mult.roc <- function(true.y, gr0, gr1, gr2)
 {
   a0 <- auc(true.y == 0, gr0)
@@ -68,16 +69,16 @@ mult.roc <- function(true.y, gr0, gr1, gr2)
   a <- (a0 + a1 + a2)/3
   a
 }  
-dane1 <- dane %>%
-  group_by(Dataset, Mapper, Method, dziwnosc, f, sym) %>%
+auc.tab1 <- vioplot.data %>%
+  group_by(Dataset, Mapper, Method, dg, f, sym) %>%
   summarise(auc = ifelse(length(unique(true.y)) == 2, auc(true.y, gr1), mult.roc(true.y, gr0, gr1, gr2) )) %>%
-  group_by(Dataset, Mapper, Method, dziwnosc, f) %>%
-  summarise(ymin = min(auc), sr = mean(auc), med = median(auc), ymax = max(auc)) 
+  group_by(Dataset, Mapper, Method, dg, f) %>%
+  summarise(ymin = min(auc), mean = mean(auc), med = median(auc), ymax = max(auc)) 
 
-dane1$f1 <- rep(c("# of predictors = 1/3 of samples", "# of predictors = 1/2 of samples", "# of predictors = 2/3 of samples"), 30)
+auc.tab1$f1 <- rep(c("# of predictors = 1/3 of samples", "# of predictors = 1/2 of samples", "# of predictors = 2/3 of samples"), 30)
 
-dane2 <- dcast(dane1 , Dataset + f ~ Mapper + dziwnosc, value.var = "sr")
-dane2$f <- as.character(dane2$f)
+auc.tab2 <- dcast(auc.tab1 , Dataset + f ~ Mapper + dg, value.var = "mean")
+auc.tab2$f <- as.character(auc.tab2$f)
 
 library(xtable)
 header <- list()
@@ -86,8 +87,8 @@ header$pos <- list(0,0,0)
 header$command <- c("\\hline \\multirow{3}{*}{Dataset} & \\multirow{3}{*}{No of pred} & \\multicolumn{6}{c}{Mapper/Difficultness} \\\\\n",
                     "\\cline{3-8}  & & \\multicolumn{2}{c|}{Hisat}& \\multicolumn{2}{c|}{Star} & \\multicolumn{2}{c}{Subread}\\\\\n", 
                     " & & yes & no &  yes & no &  yes & no \\\\\n")
-dane2$Dataset <- c("", "GSE22260", "", "", "GSE41364", "", "", "GSE42146", "", "", "GSE50760","", "", "GSE87340", "")
-dane2 %>%
+auc.tab2$Dataset <- c("", "GSE22260", "", "", "GSE41364", "", "", "GSE42146", "", "", "GSE50760","", "", "GSE87340", "")
+auc.tab2 %>%
   xtable(digits = 3,
          label = 'tab-AUC',
          caption = 'Average AUC values for 10 simulations for considered datasets and mappers',
@@ -104,69 +105,72 @@ dane2 %>%
 
 ```
 
-```{r liczenie-roc, eval = F, results="asis"}
+```{r countung-roc, eval = F, results="asis"}
 library(pROC)
 datasets1 <- c("GSE22260", "GSE41364", "GSE42146", "GSE50760", "GSE87340") 
 names(datasets) <- datasets1 
 dataset <- datasets1[1]
 map <- "his"
-dziw <- "yes"
+dg <- "yes"
 
-dane$f1 <- 0
-dane$f1[which(dane$f == 10)] <- "1/3"
-dane$f1[which(dane$f == 15)] <- "1/2"
-dane$f1[which(dane$f == 20)] <- "2/3"
-dane$f1[which(dane$f == 18)] <- "1/3"
-dane$f1[which(dane$f == 27)] <- "1/2"
-dane$f1[which(dane$f == 36)] <- "2/3"
-dane$f1[which(dane$f == 14)] <- "1/3"
-dane$f1[which(dane$f == 22)] <- "1/2"
-dane$f1[which(dane$f == 29)] <- "2/3"
-dane$f1[which(dane$f == 4 & dane$Dataset == "dataset7")] <- "1/3"
-dane$f1[which(dane$f == 6 & dane$Dataset == "dataset7")] <- "1/2"
-dane$f1[which(dane$f == 8)] <- "2/3"
-dane$f1[which(dane$f == 3)] <- "1/3"
-dane$f1[which(dane$f == 4 & dane$Dataset == "dataset8")] <- "1/2"
-dane$f1[which(dane$f == 6 & dane$Dataset == "dataset8")] <- "2/3"
-dane.roc <- list()
-dane.auc <- list()
-for(dataset in datasets1)
+vioplot.data$f1 <- 0
+vioplot.data$f1[which(vioplot.data$f == 10)] <- "1/3"
+vioplot.data$f1[which(vioplot.data$f == 15)] <- "1/2"
+vioplot.data$f1[which(vioplot.data$f == 20)] <- "2/3"
+vioplot.data$f1[which(vioplot.data$f == 18)] <- "1/3"
+vioplot.data$f1[which(vioplot.data$f == 27)] <- "1/2"
+vioplot.data$f1[which(vioplot.data$f == 36)] <- "2/3"
+vioplot.data$f1[which(vioplot.data$f == 14)] <- "1/3"
+vioplot.data$f1[which(vioplot.data$f == 22)] <- "1/2"
+vioplot.data$f1[which(vioplot.data$f == 29)] <- "2/3"
+vioplot.data$f1 <- ifelse(vioplot.data$f == 4 & vioplot.data$Dataset == "dataset7", "1/3",
+                     ifelse(vioplot.data$f == 6 & vioplot.data$Dataset == "dataset7", "1/2",
+                     ifelse(vioplot.data$f == 4 & vioplot.data$Dataset == "dataset8", "1/2",
+                     ifelse(vioplot.data$f == 8, "2/3", 
+                     ifelse(vioplot.data$f == 3, "1/3",
+                     ifelse(vioplot.data$f == 6 & vioplot.data$Dataset == "dataset8", "2/3", vioplot.data$f1))))))
+data.roc <- list()
+data.auc <- list()
+for(dataset in datasets)
 {
   for(map in maper)
   {
-    for(dziw in c("yes", "no"))
+    for(dg in c("yes", "no"))
     {
       for(j in c("1/3", "1/2", "2/3"))
       {
-        dane.auc[[dataset]][[map]][[dziw]][[j]] <- numeric(10)
+        data.auc[[dataset]][[map]][[dg]][[j]] <- numeric(10)
         for(i in 1:10)
         {
-          dane1 <- dane %>% filter(Dataset == dataset, Mapper == map, dziwnosc == dziw, f1 == j, sym == i)
-          if(length(unique(dane1$true.y)) == 2)
+          data1 <- vioplot.data %>% filter(Dataset == dataset, Mapper == map, dg == dg, f1 == j, sym == i)
+          if(length(unique(data1$true.y)) == 2)
           {
-            a <- roc(dane1$true.y, dane1$gr0)
-            dane.auc[[dataset]][[map]][[dziw]][[j]][i] <- as.numeric(a$auc)
+            a <- roc(data1$true.y, data1$gr0)
+            data.auc[[dataset]][[map]][[dg]][[j]][i] <- as.numeric(a$auc)
             a <- data.frame(fpr = 1 - a$specificities, tpr = a$sensitivities)
             a <- a[order(a$fpr,a$tpr),]
-            dane.roc[[dataset]][[map]][[dziw]][[j]][[i]] <- a
+            data.roc[[dataset]][[map]][[dg]][[j]][[i]] <- a
           } else {
-            b <- roc(dane1$true.y == 0, dane1$gr0)
+            b <- roc(data1$true.y == 0, data1$gr0)
+            roc1 <- roc(data1$true.y == 0, data1$gr0)
             a0 <- as.numeric(b$auc)
             b <- data.frame(fpr = 1 - b$specificities, tpr = b$sensitivities)
             b <- b[order(b$fpr,b$tpr),]
             a <- b
-            b <- roc(dane1$true.y == 1, dane1$gr1)
+            b <- roc(data1$true.y == 1, data1$gr1)
+            roc2 <- roc(data1$true.y == 1, data1$gr1)
             a1 <- as.numeric(b$auc)
             b <- data.frame(fpr = 1 - b$specificities, tpr = b$sensitivities)
             b <- b[order(b$fpr,b$tpr),]
             a <- rbind(a,b)
-            b <- roc(dane1$true.y == 2, dane1$gr2)
+            b <- roc(data1$true.y == 2, data1$gr2)
+            roc3 <- roc(data1$true.y == 2, data1$gr2)
             a2 <- as.numeric(b$auc)
-            dane.auc[[dataset]][[map]][[dziw]][[j]][i] <- (a0+a1+a2)/3
+            data.auc[[dataset]][[map]][[dg]][[j]][i] <- (a0+a1+a2)/3
             b <- data.frame(fpr = 1 - b$specificities, tpr = b$sensitivities)
             b <- b[order(b$fpr,b$tpr),]
             a <- rbind(a,b)
-            dane.roc[[dataset]][[map]][[dziw]][[j]][[i]] <- a
+            data.roc[[dataset]][[map]][[dg]][[j]][[i]] <- a
           }
         }
       }
@@ -177,8 +181,8 @@ for(dataset in datasets1)
 
 
 ```{r wykres-roc, eval = F, results="asis"}
-#dane1$f1 <- c("# of predictors = 1/3 of  samples", "# of predictors = 1/2 of samples", "# of predictors = 2/3 of samples")
-res <- dane.roc %>% 
+#data1$f1 <- c("# of predictors = 1/3 of  samples", "# of predictors = 1/2 of samples", "# of predictors = 2/3 of samples")
+res <- data.roc %>% 
   map_df(~.x  %>% map_df(~.x %>% map_df(~.x %>% map_df(~.x %>% map_df(~.x, .id = 'sym'), .id = 'f1'), .id = 'Difficultness'), .id = 'Mapper'), .id ='Dataset')
 
 res$Difficultness <- factor(res$Difficultness, levels = c("yes","no"))
@@ -213,15 +217,15 @@ print(p1)
 ```
 
 ```{r tabela-auc, results="asis", eval = F}
-#dane1$f1 <- c("# of predictors = 1/3 of  samples", "# of predictors = 1/2 of samples", "# of predictors = 2/3 of samples")
-dane1 <- melt(dane.auc)
-levels(dane2$L4) <- levels(dane2$L4)[c(2,1,3)]
+#data1$f1 <- c("# of predictors = 1/3 of  samples", "# of predictors = 1/2 of samples", "# of predictors = 2/3 of samples")
+data1 <- melt(data.auc)
+levels(data1$L4) <- levels(data1$L4)[c(2,1,3)]
 
-dane2 <- dane1 %>% 
+data2 <- data1 %>% 
   group_by(L1, L2, L3, L4) %>%
-  summarise(sr = mean(value))
+  summarise(mean = mean(value))
 
-dane2 <- dcast(dane2 , L1 + L4 ~ L2 + L3, value.var = "sr")
+data2 <- dcast(data2 , L1 + L4 ~ L2 + L3, value.var = "mean")
 
 
 library(xtable)
@@ -231,8 +235,8 @@ header$pos <- list(0,0,0)
 header$command <- c("\\hline \\multirow{3}{*}{Dataset} & \\multirow{3}{*}{No of pred} & \\multicolumn{6}{c}{Mapper/Difficultness} \\\\\n",
                     "\\cline{3-8}  & & \\multicolumn{2}{c|}{Hisat}& \\multicolumn{2}{c|}{Star} & \\multicolumn{2}{c}{Subread}\\\\\n", 
                     " & & yes & no &  yes & no &  yes & no \\\\\n")
-dane2$Dataset <- c("", "GSE22260", "", "", "GSE41364", "", "", "GSE42146", "", "", "GSE50760","", "", "GSE87340", "")
-dane2 %>%
+data2$Dataset <- c("", "GSE22260", "", "", "GSE41364", "", "", "GSE42146", "", "", "GSE50760","", "", "GSE87340", "")
+data2 %>%
   xtable(digits = 3,
          label = 'tab-AUC',
          caption = 'Average AUC values for 10 simulations for considered datasets and mappers',
@@ -250,34 +254,34 @@ dane2 %>%
 ```
 
 
-```{r alt-wykres-klasyfikacji, eval = F, results="asis"}
-dane <- melt(wyn_dziwne)
-dane <- cbind(dane, "yes")
-dane1 <- melt(wyn_niedziwne)
-dane1 <- cbind(dane1, "no")
-colnames(dane) <- c("f", "ML", "value", "Method", "Mapper", "Dataset", "dziwnosc")
-colnames(dane1) <- c("f", "ML", "value", "Method", "Mapper", "Dataset", "dziwnosc")
-dane <- rbind(dane, dane1)
-dane$Method <- as.character(dane$Method)
-dane$ML <- as.character(dane$ML)
-dane$Mapper <- as.character(dane$Mapper)
+```{r alt-classification-plot, eval = F, results="asis"}
+df <- melt(dg.class)
+df <- cbind(df, "yes")
+df1 <- melt(ndg.class)
+df1 <- cbind(df1, "no")
+colnames(df) <- c("f", "ML", "value", "Method", "Mapper", "Dataset", "dg")
+colnames(df1) <- c("f", "ML", "value", "Method", "Mapper", "Dataset", "dg")
+df <- rbind(df, df1)
+df$Method <- as.character(df$Method)
+df$ML <- as.character(df$ML)
+df$Mapper <- as.character(df$Mapper)
 
 for (dataset in datasets)
 {
   L1 <- unlist(read.table(file = paste0('data/', dataset, '.csv')))
-  dane$value[which(dane$Dataset == dataset)] <- dane$value[which(dane$Dataset == dataset)]/length(L1)*100
+  df$value[which(df$Dataset == dataset)] <- df$value[which(df$Dataset == dataset)]/length(L1)*100
 }
 
-dane$ML <- gsub('[0-9]+', '', dane$ML)
-dane$ML[which(dane$ML == "svmI")] <- "svm"
-dane$ML[which(dane$ML == "randomForest")] <- "rF"
+df$ML <- gsub('[0-9]+', '', df$ML)
+df$ML[which(df$ML == "svmI")] <- "svm"
+df$ML[which(df$ML == "randomForest")] <- "rF"
 
 for (met in method)
 {
   for (i in 1:3)
   {
-    dane1 <- dane %>% filter(f == i, Method == met)
-    p2 <- ggplot(dane1, aes(x=ML, y=value, fill=dziwnosc)) +
+    df2 <- df %>% filter(f == i, Method == met)
+    p2 <- ggplot(df2, aes(x=ML, y=value, fill=dg)) +
       geom_violin(trim=FALSE) + facet_grid(Dataset ~ Mapper, scales = "free") +
       labs(x="Classifier", y = "Percentage of misclassified samples") +
       theme_bw() + theme(plot.title = element_text(hjust = 0.5),

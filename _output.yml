@@ -1,15 +1,15 @@
 bookdown::gitbook:
   dev: svglite
   css: style.css
-  split_by: section
+  split_by: chapter
   config:
     toc:
       collapse: none
       before: |
-        <li><a href="./">Przykład</a></li>
+        <li><a href="./">Summary</a></li>
       after: |
-        <li><a href="https://github.com/Bioinformatics-Group-UP-Poznan/Difficult-genes" target="blank">Published with bookdown</a></li>
-    edit: https://github.com/Bioinformatics-Group-UP-Poznan/Difficult-genes/%s
+        <li><a href="https://github.com/Bioinformatics-Group-UP-Poznan/ambiguous-genes" target="blank">Published with bookdown</a></li>
+    edit: https://github.com/Bioinformatics-Group-UP-Poznan/ambiguous-genes
     download: [pdf, epub]
 bookdown::pdf_book:
   includes:
@@ -21,8 +21,5 @@ bookdown::pdf_book:
   pandoc_args: --top-level-division=chapter
   toc_depth: 3
   toc_unnumbered: no
-  toc_appendix: yes
+  toc_appendix: no
   keep_tex: yes
-bookdown::epub_book: default
-bookdown::html_chapters:
-  css: [style.css, toc.css]

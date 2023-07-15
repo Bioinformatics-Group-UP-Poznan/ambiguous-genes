@@ -1,52 +1,57 @@
 ## Preliminary analysis
 
-```{r pakiety+ustawienia, message=FALSE, warning=FALSE, echo = F}
-require(graphics); require(grDevices)
-library(ggplot2)
+```{r packages+settings, message=FALSE, warning=FALSE, echo = F}
+require(graphics); 
+require(grDevices)
+library(tidyverse)
 library(reshape2)
 library(grid)
 library(knitr)
-library(dplyr)
 ```
 
 ### Heatmaps
 
-```{r mapy-ciepla, message=FALSE, warning=FALSE, echo = F, fig.width = 12, fig.height = 12}
-nazwy <- dir("data/", pattern = "dataset")
-nazwy <- nazwy[grep(nazwy, pattern = "Rdata")]
-nazwy <- gsub(nazwy, pattern = ".Rdata", replacement = "")
+```{r message=FALSE, warning=FALSE, echo = F, fig.width = 12, fig.height = 12}
+datasets <- dir("data/", pattern = "dataset")
+datasets <- datasets[grep(datasets, pattern = "Rdata")]
+datasets <- gsub(datasets, pattern = ".Rdata", replacement = "")
 
-datasets <- strsplit(nazwy, "_")
+datasets <- strsplit(datasets, "_")
 maper <- unique(sapply(datasets, "[[", 2))
 datasets <- unique(sapply(datasets, "[[", 1))
-dane.cor <- NULL
+```
+
+These plots are checking whether experimental design is proper.
+
+```{r heatmaps, message=FALSE, warning=FALSE, echo = F, fig.width = 12, fig.height = 12}
+data.cor <- NULL
 for (dataset in datasets)
 {
-  klas <- unlist(read.table(file = paste0('data/', dataset, '.csv')))
+  groups <- unlist(read.table(file = paste0('data/', dataset, '.csv')))
   for (map in maper)
   {
-    load(file = paste0("data/", dataset, "_", map, ".RData"))
-    colnames(cc) <- paste(klas, 1:length(klas), sep = ".")
+    cc <- readRDS(file = paste0("data/", dataset, "_", map, ".rds"))
+    colnames(cc) <- paste(groups, 1:length(groups), sep = ".")
     cc <- cc[,order(colnames(cc))]
-    dane <- cor(cc, method = "spearman")
-    dane <- melt(dane)
-    dane.cor <- rbind(dane.cor, cbind(dane, map, dataset))
+    data1 <- cor(cc, method = "spearman")
+    data1 <- melt(data1)
+    data.cor <- rbind(data.cor, cbind(data1, map, dataset))
   }
 }
 
-dane.kor <- dane.cor %>%
-  mutate(podzial = as.factor(paste(map, dataset, sep = "-")))
-colnames(dane.kor) <- c("Var1", "Var2", "value", "map", "dataset", "podzial")
-dane.kor$dataset <- as.character(dane.kor$dataset)
-dane.kor$dataset[which(dane.kor$dataset == "dataset4")] <- "GSE22260"
-dane.kor$dataset[which(dane.kor$dataset == "dataset5")] <- "GSE50760"
-dane.kor$dataset[which(dane.kor$dataset == "dataset6")] <- "GSE87340"
-dane.kor$dataset[which(dane.kor$dataset == "dataset7")] <- "GSE42146"
-dane.kor$dataset[which(dane.kor$dataset == "dataset8")] <- "GSE41364"
+data.cor <- data.cor %>%
+  mutate(factors = as.factor(paste(map, dataset, sep = "-")))
+colnames(data.cor) <- c("Var1", "Var2", "value", "map", "dataset", "factors")
+data.cor$dataset <- as.character(data.cor$dataset)
+data.cor$dataset[which(data.cor$dataset == "dataset4")] <- "GSE22260"
+data.cor$dataset[which(data.cor$dataset == "dataset5")] <- "GSE50760"
+data.cor$dataset[which(data.cor$dataset == "dataset6")] <- "GSE87340"
+data.cor$dataset[which(data.cor$dataset == "dataset7")] <- "GSE42146"
+data.cor$dataset[which(data.cor$dataset == "dataset8")] <- "GSE41364"
 
 
-p <- ggplot(dane.kor, aes(Var1, Var2)) + 
-  geom_tile(aes(fill = value, group=podzial) ) + 
+p <- ggplot(data.cor, aes(Var1, Var2)) + 
+  geom_tile(aes(fill = value, group = factors) ) + 
   scale_fill_gradient(low = "white", high = "steelblue", name = "Correlation") +
   theme_bw() + xlab('') + ylab("") + 
   facet_wrap(map~dataset, scales = "free") + 
@@ -54,44 +59,84 @@ p <- ggplot(dane.kor, aes(Var1, Var2)) +
 print(p)
 ```
 
+### Library sizes
 
-### Barplots
+Distribution of library sizes in each dataset and for each maper.
+
+```{r}
+res <- list()
+
+for (dataset in datasets)
+{
+  counts <- numeric()
+  for (map in maper)
+  {
+    cc <- readRDS(file = paste0("data/", dataset, "_", map, ".rds"))
+    counts1 <- colSums(cc)
+    counts <- rbind(counts, counts1)
+  }
+  rownames(counts) <- maper
+  res[[dataset]] <- counts
+}
+
+res <- as.data.frame(res) %>%
+  rownames_to_column("maper") %>%
+  gather("dataset", "library.size", -maper) %>% 
+  separate(dataset, c("dataset", "sample"), extra = "merge")
 
 
-```{r barploty, message=FALSE, warning=FALSE, echo = F, fig.width = 10, fig.height = 7}
+res$dataset[which(res$dataset == "dataset4")] <- "GSE22260"
+res$dataset[which(res$dataset == "dataset5")] <- "GSE50760"
+res$dataset[which(res$dataset == "dataset6")] <- "GSE87340"
+res$dataset[which(res$dataset == "dataset7")] <- "GSE42146"
+res$dataset[which(res$dataset == "dataset8")] <- "GSE41364"
+
+ggplot(res, aes(maper, library.size)) +
+  geom_boxplot(position = "dodge") +
+  facet_wrap(~ dataset, ncol = 5) +
+  theme_bw() + 
+  ylab("library size") + xlab("mapper") + 
+  theme(axis.title = element_text(size = 9.5)) 
+```
+
+### Structure of counts
+
+#### Barplots without division
+
+```{r barplots, message=FALSE, warning=FALSE, echo = F, fig.width = 10, fig.height = 7}
 library(edgeR)
 
 res <- list()
 
 for (dataset in datasets)
 {
-  dane <- matrix(,length(maper),6)
-  colnames(dane) <- c('>5000','1000-5000', '500-1000', '100-500', '10-100', '<10')
-  rownames(dane) <- maper
+  data.counts <- matrix(,length(maper),6)
+  colnames(data.counts) <- c('>5000','1000-5000', '500-1000', '100-500', '10-100', '<10')
+  rownames(data.counts) <- maper
   for (map in maper)
   {
-    load(file = paste0("data/", dataset, "_", map, ".RData"))
+    cc <- readRDS(file = paste0("data/", dataset, "_", map, ".rds"))
     isexpr <- rowSums(cpm(cc) > 5) >= 2
-    dane1 <- cc[isexpr,]
-    srednie <- rowMeans(dane1)
-    dane[which(maper == map),6] <- length(which(srednie < 10))
-    dane[which(maper == map),5] <- length(which(srednie >= 10 & srednie < 100))
-    dane[which(maper == map),4] <- length(which(srednie >= 100 & srednie < 500))
-    dane[which(maper == map),3] <- length(which(srednie >= 500 & srednie < 1000))
-    dane[which(maper == map),2] <- length(which(srednie >= 1000 & srednie < 5000))
-    dane[which(maper == map),1] <- length(which(srednie >= 5000))
+    data1 <- cc[isexpr,]
+    srednie <- rowMeans(data1)
+    data.counts[which(maper == map),6] <- length(which(srednie < 10))
+    data.counts[which(maper == map),5] <- length(which(srednie >= 10 & srednie < 100))
+    data.counts[which(maper == map),4] <- length(which(srednie >= 100 & srednie < 500))
+    data.counts[which(maper == map),3] <- length(which(srednie >= 500 & srednie < 1000))
+    data.counts[which(maper == map),2] <- length(which(srednie >= 1000 & srednie < 5000))
+    data.counts[which(maper == map),1] <- length(which(srednie >= 5000))
   }
-  res[[dataset]] <- dane
+  res[[dataset]] <- data.counts
 }
 
-res<-melt(res)
+res <- melt(res)
 colnames(res) <- c("maper", "abundance", "value", "dataset")
 res$dataset[which(res$dataset == "dataset4")] <- "GSE22260"
 res$dataset[which(res$dataset == "dataset5")] <- "GSE50760"
 res$dataset[which(res$dataset == "dataset6")] <- "GSE87340"
 res$dataset[which(res$dataset == "dataset7")] <- "GSE42146"
 res$dataset[which(res$dataset == "dataset8")] <- "GSE41364"
-res$abundance <- factor(res$abundance, levels=rev(levels(res$abundance)))
+res$abundance <- factor(res$abundance, levels = rev(levels(res$abundance)))
 
 p <- ggplot(res, aes(x=maper, y= value, fill = abundance, order= T), stat = "identity") +
     geom_bar(stat = "identity") +
@@ -101,4 +146,97 @@ p <- ggplot(res, aes(x=maper, y= value, fill = abundance, order= T), stat = "ide
     theme_bw() +
     theme(axis.text.x=element_text(angle=90,hjust=1))
 print(p)
+
 ```
+
+#### Barplots with division
+
+```{r}
+library(edgeR)
+
+res.all <- list()
+
+for (dataset in datasets)
+{
+  counts <- matrix(,length(maper),6)
+  colnames(counts) <- c('>5000','1000-5000', '500-1000', '100-500', '10-100', '<10')
+  rownames(counts) <- maper
+  for (map in maper)
+  {
+    cc <- readRDS(file = paste0("data/", dataset, "_", map, ".rds"))
+    isexpr <- rowSums(cpm(cc) > 5) >= 2
+    means <- rowMeans(cc[isexpr,])
+    counts[which(maper == map),6] <- length(which(means < 10))
+    counts[which(maper == map),5] <- length(which(means >= 10 & means < 100))
+    counts[which(maper == map),4] <- length(which(means >= 100 & means < 500))
+    counts[which(maper == map),3] <- length(which(means >= 500 & means < 1000))
+    counts[which(maper == map),2] <- length(which(means >= 1000 & means < 5000))
+    counts[which(maper == map),1] <- length(which(means >= 5000))
+  }
+  res.all[[dataset]] <- counts
+}
+
+res.all <- melt(res.all)
+colnames(res.all) <- c("maper", "abundance", "value", "dataset")
+res.all$dataset[which(res.all$dataset == "dataset4")] <- "GSE22260"
+res.all$dataset[which(res.all$dataset == "dataset5")] <- "GSE50760"
+res.all$dataset[which(res.all$dataset == "dataset6")] <- "GSE87340"
+res.all$dataset[which(res.all$dataset == "dataset7")] <- "GSE42146"
+res.all$dataset[which(res.all$dataset == "dataset8")] <- "GSE41364"
+```
+
+
+```{r}
+res.ndg <- list()
+for(dataset in datasets)
+{
+  dg <- readRDS(file = paste0("results/difficult_genes_", dataset, ".rds"))
+  dg.id <- rownames(dg$edgeR$stats)[which(dg$edgeR$stats$status.group == 'Sig' & dg$edgeR$stats$status.mappers == 'Sig')]
+  counts <- matrix(,length(maper),6)
+  colnames(counts) <- c('>5000','1000-5000', '500-1000', '100-500', '10-100', '<10')
+  rownames(counts) <- maper
+  for (map in maper)
+  {  
+    cc <- readRDS(file = paste0("data/", dataset, "_", map, ".rds"))
+    isexpr <- rowSums(cpm(cc) > 5) >= 2
+    counts1 <- cc[isexpr,]
+    counts2 <- counts1[-which(rownames(counts1) %in% dg.id), ]
+    means <- rowMeans(counts2)
+    counts[which(maper == map),6] <- length(which(means < 10))
+    counts[which(maper == map),5] <- length(which(means >= 10 & means < 100))
+    counts[which(maper == map),4] <- length(which(means >= 100 & means < 500))
+    counts[which(maper == map),3] <- length(which(means >= 500 & means < 1000))
+    counts[which(maper == map),2] <- length(which(means >= 1000 & means < 5000))
+    counts[which(maper == map),1] <- length(which(means >= 5000))
+  }
+  res.ndg[[dataset]] <- counts
+}
+
+res.ndg <- melt(res.ndg)
+colnames(res.ndg) <- c("maper", "abundance", "value", "dataset")
+res.ndg$dataset[which(res.ndg$dataset == "dataset4")] <- "GSE22260"
+res.ndg$dataset[which(res.ndg$dataset == "dataset5")] <- "GSE50760"
+res.ndg$dataset[which(res.ndg$dataset == "dataset6")] <- "GSE87340"
+res.ndg$dataset[which(res.ndg$dataset == "dataset7")] <- "GSE42146"
+res.ndg$dataset[which(res.ndg$dataset == "dataset8")] <- "GSE41364"
+```
+
+```{r}
+res.all$difficult <- "all"
+res.ndg$difficult <- "non DGs"
+
+res2 <- rbind(res.all, res.ndg)
+res2$abundance <- factor(res2$abundance, levels=levels(res2$abundance)[c(1,3:6,2)])
+
+
+p <- ggplot(res2, aes(x=difficult, y= value, fill = abundance, order= T), stat = "identity") +
+  geom_bar(stat = "identity") +
+  xlab('Methods') + ylab("No of genes") +
+  facet_grid(dataset ~ maper) +
+  scale_fill_brewer(palette='Greens',name='Abundance\nof genes') +
+  theme_bw()
+print(p)
+
+ggsave("results/barplot_with_division.png", width = 6, height = 4.13, dpi = 300)
+```
+

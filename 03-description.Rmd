@@ -1,11 +1,11 @@
-# Description of difficult genes {#description}
+## Description of difficult genes {#description}
 
 ```{r}
 datasets1 <- c("GSE22260", "GSE41364", "GSE42146", "GSE50760", "GSE87340")
 names(datasets1) <- paste0("dataset", c(4, 8, 7, 5, 6))
 ```
 
-## Characteristics of DGs
+### Characteristics of DGs
 
 Loading annotation for exons.
 
@@ -87,9 +87,9 @@ dg.lists <- list()
 ndg.lists <- list()
 for (dataset in datasets)
 {
-  load(file = paste0("results/difficult_genes_", dataset, ".RData"))
-  dg.lists[[dataset]] <- rownames(res.dane$edgeR$stats[which(res.dane$edgeR$stats$status.group == "Sig" & res.dane$edgeR$stats$status.mappers == "Sig"),])
-  ndg.lists[[dataset]] <- rownames(res.dane$edgeR$stats[which(res.dane$edgeR$stats$status.group == "Sig" & res.dane$edgeR$stats$status.mappers == "nonSig"),])
+  dg <- readRDS(file = paste0("results/difficult_genes_", dataset, ".rds"))
+  dg.lists[[dataset]] <- rownames(dg$edgeR$stats[which(dg$edgeR$stats$status.group == "Sig" & dg$edgeR$stats$status.mappers == "Sig"),])
+  ndg.lists[[dataset]] <- rownames(dg$edgeR$stats[which(dg$edgeR$stats$status.group == "Sig" & dg$edgeR$stats$status.mappers == "nonSig"),])
 }
 
 dg <- dg.lists %>% 
@@ -124,7 +124,7 @@ tab1$datasets[which(tab1$datasets == "dataset8")] <- "GSE41364"
 ```
 
 
-```{r tab-characteristics}
+```{r tab-characteristics, results='asis'}
 header <- list()
 
 header$pos <- list(0)
@@ -133,7 +133,7 @@ header$command <- c(
 
 tab1 %>% 
   arrange(datasets) %>% 
-  rename(Dataset = datasets) %>% 
+  dplyr::rename(Dataset = datasets) %>% 
   xtable(digits = 0,
          label = 'tab-char',
          caption = 'Characteristics of DG genes found in each dataset. Columns represent Ex.min - the length of the shortest exon, Ex.max - the length of the longest exon, Ex.mean - the mean exon length, Ex.no - the total number of exons as well as Tr.length - the transcript length. Each value was calculated as a mean value across all transcripts in datasets with division to DG and other genes.',
@@ -147,10 +147,10 @@ tab1 %>%
         NA.string = '--',
         sanitize.text.function = function(x){x},
         table.placement = 'ht!')
-tab1
+#tab1
 ```
 
-## Number of DGs
+### Number of DGs
 
 ```{r dg-counts-all1, results="asis"}
 for (dataset in datasets)
@@ -219,12 +219,12 @@ con.m %>%
 
 ```
 
-## Number of DGs with mappers separately
+### Number of DGs with mappers separately
 
 ```{r dg-counts-mappers-separately,  results="asis"}
 met <- "edgeR"
 con.m <- matrix(,length(datasets),2*length(maper))
-rownames(con.m) <- datasets1
+rownames(con.m) <- datasets
 colnames(con.m) <- rep(c('m.T', 'm.N'),length(maper))
 dg.id <- list()
 
@@ -242,10 +242,7 @@ for (dataset in datasets)
   
   for (map in maper)
   {
-    cc <- readRDS(file = paste0("data/", dataset, "_", map, ".rds"))
-    
-    res.data1 <- diffAnaAll1(cc, groups, method = met)
-    res.data1 <- res.data1 %>% arrange(padj)
+    res.data1 <- readRDS(paste0("results/diffAna_",dataset, "_", map, ".rds"))
     deg.id <- res.data1$ID[which(res.data1$padj < 0.05)]
     
     con.m[which(datasets == dataset), (which(maper == map)-1)*2+1]  <- length(intersect(dg.id[[dataset]][[met]]$ID, deg.id))/length(res.data1$ID)*100
@@ -253,6 +250,9 @@ for (dataset in datasets)
     con.m[which(datasets == dataset), (which(maper == map)-1)*2+2] <- length(intersect(deg.id, dg.id[[dataset]][[met]]$ID))/length(deg.id)*100
   }  
 }
+
+rownames(con.m) <- datasets1[match(rownames(con.m), names(datasets1))]
+con.m <- con.m[order(rownames(con.m)),]
 ```
 
 
@@ -280,7 +280,7 @@ con.m %>%
         table.placement = 'ht!')
 ```
 
-## Venn diagrams 
+### Venn diagrams 
 
 ```{r venns, results="asis"}
 library(VennDiagram)

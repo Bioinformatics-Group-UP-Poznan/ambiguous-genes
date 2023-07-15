@@ -1,5 +1,9 @@
+project:
+  render:
+    - "*.rmd"
+    - "!internal/"
 book_filename: "Summary-of-results"
-output_dir: _book
+output_dir: Summary
 clean: [packages.bib, bookdown.bbl]
 delete_merged_file: true
 language:

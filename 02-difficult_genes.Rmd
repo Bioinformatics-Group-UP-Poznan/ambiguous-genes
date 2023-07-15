@@ -1,56 +1,51 @@
 ## Difficult genes {#difficult_genes}
 
-```{r wstep-02, include = FALSE}
-library(xtable)
-library(reshape)
-```
 
-
-```{r dziwne-geny, echo=F, eval = F}
+```{r DG, eval = F}
 source("codes/google_difficult_genes_functions.R")
 
 for (dataset in datasets)
 {
-  res.dane <- list()
-  klas <- unlist(read.table(file = paste0('data/', dataset, '.csv')))
-  county <- NULL
+  res.data <- list()
+  groups <- unlist(read.table(file = paste0('data/', dataset, '.csv')))
+  counts <- NULL
   for (map in maper)
   {
-    load(file = paste0("data/", dataset, "_", map, ".RData"))
-    county <- cbind(county, cc)
+    cc <- readRDS(file = paste0("data/", dataset, "_", map, ".rds"))
+    counts <- cbind(counts, cc)
   }
-  res.dane[["edgeR"]] <- wyszukiwarka5(county, n.mapper = length(maper), design = klas, method = "edgeR")
-  res.dane[["DESeq"]] <- wyszukiwarka5(county, n.mapper = length(maper), design = klas, method = "DESeq")
-  res.dane[["limma1"]] <- wyszukiwarka5(county, n.mapper = length(maper), design = klas, method = "limma1")
-  res.dane[["limma2"]] <- wyszukiwarka5(county, n.mapper = length(maper), design = klas, method = "limma2")
-  save(res.dane, file = paste0("results/difficult_genes_", dataset, ".RData"))
+  res.data[["edgeR"]] <- dg.seeker5(counts, n.mapper = length(maper), exp.design = groups, method = "edgeR")
+  res.data[["DESeq"]] <- dg.seeker5(counts, n.mapper = length(maper), exp.design = groups, method = "DESeq")
+  res.data[["limma1"]] <- dg.seeker5(counts, n.mapper = length(maper), exp.design = groups, method = "limma1")
+  res.data[["limma2"]] <- dg.seeker5(counts, n.mapper = length(maper), exp.design = groups, method = "limma2")
+  saveRDS(res.data, file = paste0("results/difficult_genes_filtered_", dataset, ".rds"))
 }
 
 ```
 
-```{r wykresy-dziwnych-genow, echo = F, fig.width=12, fig.height = 16}
-
-por.mapery <- combn(maper, length(maper))
-dane <- list()
+```{r data2plots-DG}
+comp.mappers <- combn(maper, length(maper))
+data.plot <- list()
 method <- c("edgeR", "DESeq", "limma1", "limma2")
+
 for (dataset in datasets)
 {
-  county <- NULL
+  counts <- NULL
   for (j in 1:length(maper))
   {
-    load(file = paste0("data/", dataset, "_", por.mapery[j, 1], ".RData"))
-    colnames(cc) <- paste0("c",1:ncol(cc),".", por.mapery[j, 1])
-    county <- cbind(county, cc)
+    cc <- readRDS(file = paste0("data/", dataset, "_", comp.mappers[j, 1], ".rds"))
+    colnames(cc) <- paste0("c",1:ncol(cc),".", comp.mappers[j, 1])
+    counts <- cbind(counts, cc)
   }
-  load(paste0("results/difficult_genes_", dataset, ".RData"))
+  dg <- readRDS(paste0("results/difficult_genes_", dataset, ".rds"))
     
   for (met in method)
   {
-    a <- data.frame(res.dane[[met]]$stats)
+    a <- data.frame(dg[[met]]$stats)
     a <- a[which(a$status.group == "Sig" & a$status.mappers == "Sig"),]
     a$ind <- a$pval.gr+a$pval.map
     a <- a[order(a$pval.map, a$pval.gr), ]
-    nazwy.wspolne <- match(rownames(a), rownames(cc))
+    joint.names <- match(rownames(a), rownames(cc))
     
     
     for (j in 1:length(maper))
@@ -59,31 +54,49 @@ for (dataset in datasets)
       if(nrow(a) > 0)
       {  
         
-        dane[[dataset]][[met]][[por.mapery[j,1] ]] <- county[nazwy.wspolne[1:5], (ncol(cc)*(j-1)+1):(ncol(cc)*j)]
-        colnames(dane[[dataset]][[met]][[por.mapery[j, 1] ]]) <- 1:ncol(cc)
+        data.plot[[dataset]][[met]][[comp.mappers[j,1] ]] <- counts[joint.names[1:5], (ncol(cc)*(j-1)+1):(ncol(cc)*j)]
+        colnames(data.plot[[dataset]][[met]][[comp.mappers[j, 1] ]]) <- 1:ncol(cc)
       } else {
-        dane[[dataset]][[met]][[por.mapery[j,1] ]] <- NULL
+        data.plot[[dataset]][[met]][[comp.mappers[j,1] ]] <- NULL
       }
     }
   }  
 }
 
-res <- melt(dane)
-dane1 <- res %>% filter(L2 == "edgeR")
-dane1$L1[which(dane1$L1 == "dataset4")] <- "GSE22260"
-dane1$L1[which(dane1$L1 == "dataset5")] <- "GSE50760"
-dane1$L1[which(dane1$L1 == "dataset6")] <- "GSE87340"
-dane1$L1[which(dane1$L1 == "dataset7")] <- "GSE42146"
-dane1$L1[which(dane1$L1 == "dataset8")] <- "GSE41364"
+res <- melt(data.plot)
 
-p <- ggplot(dane1) + geom_line( size = 1, 
-            aes(x = X2, y = value, group = L3, colour = L3, alpha = 0.5)) +
-            facet_wrap(L1~X1, scales = "free", ncol=5) + theme_bw() +
-            scale_colour_brewer(palette = "Set1") + scale_fill_hue(l=40) +
-            scale_alpha_continuous(guide = FALSE) +
-            theme(legend.position = "bottom", legend.title=element_blank()) +
-            ylab("Counts") + xlab("Sample no") + 
-            theme(text = element_text(size = 20)) +
-            guides(color = guide_legend(override.aes = list(alpha = 1, size = 3)))
+colnames(res) <- c("Var1", "Var2", "value", "L3", "L2", "L1")
+
+data1 <- res %>% filter(L2 == "edgeR")
+data1$L1[which(data1$L1 == "dataset4")] <- "22260"
+data1$L1[which(data1$L1 == "dataset5")] <- "50760"
+data1$L1[which(data1$L1 == "dataset6")] <- "87340"
+data1$L1[which(data1$L1 == "dataset7")] <- "42146"
+data1$L1[which(data1$L1 == "dataset8")] <- "41364"
+```
+
+
+```{r, eval=F}
+data1 %>% 
+  group_by(L1) %>% 
+  distinct(Var1, .keep_all = TRUE) %>% 
+  filter(L1 %in% c("22260", "50760", "87340")) %>% 
+  select(dataset = L1, geny = Var1) -> do.gviz
+  
+# saveRDS(do.gviz, file = "results/gviz_data_4-6.rds")
+```
+
+
+```{r plots-DG, echo=F, fig.height=16, fig.width=12}
+p <- ggplot(data1) + geom_line(size = .7, 
+            aes(x = Var2, y = value, group = L3, colour = L3)) +
+  facet_wrap(L1~Var1, scales = "free", ncol=5) + theme_bw() +
+  scale_colour_manual(values = c("#5A9AC7","#6CBB85","#E56865")) +
+  scale_x_continuous(labels = function(x) round(x), breaks = function(x) pretty(x, n = 5)) +
+  ylab("Counts") + xlab("Sample no") + 
+  theme(legend.position = "bottom", legend.title=element_blank(),
+        text = element_text(size = 10), strip.text = element_text(size = 12)) 
 print(p)
+ggsave("results/dg-counts.png", width = 10, height = 12, dpi = 300)
+
 ```

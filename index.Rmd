@@ -5,7 +5,6 @@ author:
 - Joanna Zyprych-Walczak
 - Idzi Siatkowski
 - Michał Okoniewski
-site: bookdown::bookdown_site
 output: 
       bookdown::pdf_book:
         includes:
@@ -20,24 +19,25 @@ link-citations: yes
 biblio-style: "apalike"
 ---
 
-## Introduction
 
-The issue being analysed is pinpointing the genes that cause systematically artifactual results in the analysis of RNA-seq. Such genes cannot be reliably measured and detected as differentially expressed. In particular the problem occurs, when popular genome aligners do not agree in the number and distribution of reads assigned to such genes. It causes confusion in reproducible data analysis. When such difficult genes are those of particular biological interest, it may distort the biological interpretation of the whole experiment. When difficult genes are the key ones in human metabolic pathways, the distorted results may be confusing for the further research in genomic personalised medicine.
-
-
-
-  
-```{r setup1, include=FALSE}
+```{r packages, include=FALSE}
 library(knitr)
 library(xtable)
 library(Cairo)
-options(xtable.comment = FALSE)
-opts_chunk$set(echo = FALSE, message = FALSE, warning = FALSE,  tidy.opts = list(width.cutoff=37), tidy=TRUE)
-opts_chunk$set(cache = T)
-
+library(reshape)
+library(tidyverse)
+library(purrr)
+library(RColorBrewer)
 ```
 
+```{r setup1, include=FALSE}
+options(xtable.comment = FALSE)
+opts_chunk$set(echo = FALSE, message = FALSE, warning = FALSE,  tidy.opts = list(width.cutoff=60), tidy=TRUE, fig.width = 6, fig.height = 4.13, dpi = 300)
+```
 
+## Introduction
+
+The issue being analysed is pinpointing the genes that cause systematically artifactual results in the analysis of RNA-seq. Such genes cannot be reliably measured and detected as differentially expressed. In particular the problem occurs, when popular genome aligners do not agree in the number and distribution of reads assigned to such genes. It causes confusion in reproducible data analysis. When such difficult genes are those of particular biological interest, it may distort the biological interpretation of the whole experiment. When difficult genes are the key ones in human metabolic pathways, the distorted results may be confusing for the further research in genomic personalised medicine.
 
 
 ```{r include=FALSE}
